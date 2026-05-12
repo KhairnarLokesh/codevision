@@ -1,8 +1,8 @@
 {
-  "name": "codevision",
+  "name": "codevision-ai",
   "displayName": "CodeVision",
   "description": "Real-time dynamic visualization of source code",
-  "publisher": "LokeshKhairnar",
+  "publisher": "codevisionlabs",
   "icon": "images/icon.jpg",
   "repository": {
     "type": "git",
