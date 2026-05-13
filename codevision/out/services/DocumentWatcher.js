@@ -53,11 +53,13 @@ class DocumentWatcher {
     start() {
         if (!this._disposable) {
             this._disposable = vscode.workspace.onDidChangeTextDocument(this._onDocumentChanged, this);
-            // Trigger initial parse for active editor
-            const activeEditor = vscode.window.activeTextEditor;
-            if (activeEditor) {
-                this._processDocument(activeEditor.document);
-            }
+            this.reprocess();
+        }
+    }
+    reprocess() {
+        const activeEditor = vscode.window.activeTextEditor;
+        if (activeEditor) {
+            this._processDocument(activeEditor.document);
         }
     }
     _onDocumentChanged(event) {
@@ -80,6 +82,8 @@ class DocumentWatcher {
             const graphData = this._graphBuilder.build(astData);
             // Run Static Analysis
             const analysisData = this._analyzer.analyze(code, fileName, languageId);
+            // Debug popup
+            vscode.window.showInformationMessage(`CodeVision: Parsed ${astData.entities.length} entities from ${languageId}`);
             // Send to Webview
             CodeVisionPanel_1.CodeVisionPanel.postMessage({
                 type: 'updateGraph',

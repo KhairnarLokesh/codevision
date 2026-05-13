@@ -3,36 +3,40 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GraphBuilder = void 0;
 class GraphBuilder {
     build(astData) {
-        // Simple layout strategy: arrange nodes in a grid or sequentially
-        // A proper auto-layout algorithm like Dagre would be used in a production version.
-        const reactFlowNodes = astData.nodes.map((node, index) => {
-            // Very basic pseudo-layout
-            const x = (index % 4) * 200;
-            const y = Math.floor(index / 4) * 150;
+        const reactFlowNodes = astData.entities.map(entity => {
             return {
-                id: node.id,
-                position: { x, y },
+                id: entity.id,
+                position: { x: 0, y: 0 }, // Dagre/Layout engine will set this
                 data: {
-                    label: node.label,
-                    type: node.type,
-                    startLine: node.startLine
+                    label: entity.label,
+                    type: entity.type,
+                    startLine: entity.startLine,
+                    semanticRole: entity.semanticRole
                 },
-                type: 'customNode' // We will define a custom node in React
+                type: 'customNode'
             };
         });
-        const reactFlowEdges = astData.edges.map(edge => {
+        const reactFlowEdges = astData.relationships.map(rel => {
             return {
-                id: edge.id,
-                source: edge.source,
-                target: edge.target,
-                label: edge.label,
+                id: rel.id,
+                source: rel.source,
+                target: rel.target,
+                label: rel.label || rel.type,
                 type: 'smoothstep',
-                animated: true
+                animated: rel.animated || false
             };
         });
         return {
-            nodes: reactFlowNodes,
-            edges: reactFlowEdges
+            entities: reactFlowNodes,
+            relationships: reactFlowEdges,
+            architecture: astData.architecture || [],
+            runtime: astData.runtime || [],
+            metadata: {
+                diagramType: astData.metadata?.diagramType || 'GENERIC',
+                confidence: astData.metadata?.confidence || 0.1,
+                recommendedLayout: astData.metadata?.recommendedLayout || 'GRID',
+                patterns: astData.patterns || []
+            }
         };
     }
 }

@@ -3,6 +3,7 @@ import { AstParser } from '../parser/AstParser';
 import { GraphBuilder } from '../graph-engine/GraphBuilder';
 import { CodeVisionPanel } from '../webview/CodeVisionPanel';
 import { StaticAnalyzer } from '../analyzer/StaticAnalyzer';
+import { DebugService } from './DebugService';
 
 export class DocumentWatcher implements vscode.Disposable {
   private _disposable: vscode.Disposable | undefined;
@@ -10,16 +11,19 @@ export class DocumentWatcher implements vscode.Disposable {
   private _parser: AstParser;
   private _graphBuilder: GraphBuilder;
   private _analyzer: StaticAnalyzer;
+  private _debugService: DebugService;
 
   constructor() {
     this._parser = new AstParser();
     this._graphBuilder = new GraphBuilder();
     this._analyzer = new StaticAnalyzer();
+    this._debugService = new DebugService();
   }
 
   public start() {
     if (!this._disposable) {
       this._disposable = vscode.workspace.onDidChangeTextDocument(this._onDocumentChanged, this);
+      this._debugService.start();
       this.reprocess();
     }
   }
@@ -82,6 +86,7 @@ export class DocumentWatcher implements vscode.Disposable {
     if (this._debounceTimer) {
       clearTimeout(this._debounceTimer);
     }
+    this._debugService.dispose();
   }
 }
 

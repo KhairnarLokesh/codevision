@@ -38,6 +38,7 @@ const getVscodeApi = () => {
 
 function App() {
   const [graphData, setGraphData] = useState<any>(null);
+  const [activeLine, setActiveLine] = useState<number | null>(null);
 
   useEffect(() => {
     const vscode = getVscodeApi();
@@ -51,6 +52,8 @@ function App() {
         if (message.payload.graph !== undefined) {
           setGraphData(message.payload.graph);
         }
+      } else if (message.type === 'highlightNode') {
+        setActiveLine(message.payload.line);
       }
     };
 
@@ -61,7 +64,7 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <ErrorBoundary>
-        {graphData ? <GraphViewer data={graphData} /> : <div style={{ padding: '20px', color: '#94a3b8' }}>Waiting for code changes...</div>}
+        {graphData ? <GraphViewer data={graphData} activeLine={activeLine} /> : <div style={{ padding: '20px', color: '#94a3b8' }}>Waiting for code changes...</div>}
       </ErrorBoundary>
     </div>
   );

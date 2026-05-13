@@ -146,15 +146,30 @@ const getLayoutedElements = (nodes: any[], edges: any[], direction = 'TB') => {
   return { nodes, edges };
 };
 
-export default function GraphViewer({ data }: { data: any }) {
+export default function GraphViewer({ data, activeLine }: { data: any, activeLine?: number | null }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
 
   useEffect(() => {
     if (data && data.entities) {
       const direction = data.metadata?.recommendedLayout || 'TB';
+      
+      // Update node types based on activeLine
+      const enrichedEntities = data.entities.map((entity: any) => {
+        if (activeLine && entity.data.startLine === activeLine) {
+          return {
+            ...entity,
+            data: {
+              ...entity.data,
+              type: 'Active Execution'
+            }
+          };
+        }
+        return entity;
+      });
+
       const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-        data.entities,
+        enrichedEntities,
         data.relationships,
         direction
       );
@@ -162,7 +177,7 @@ export default function GraphViewer({ data }: { data: any }) {
       setNodes([...layoutedNodes]);
       setEdges([...layoutedEdges]);
     }
-  }, [data]);
+  }, [data, activeLine]);
 
   const nodeTypes = useMemo(() => ({ customNode: CustomNode }), []);
 

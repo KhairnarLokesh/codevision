@@ -45,7 +45,10 @@ function activate(context) {
         CodeVisionPanel_1.CodeVisionPanel.render(context.extensionUri);
         documentWatcher.start();
     });
-    context.subscriptions.push(startCommand, documentWatcher);
+    const reprocessCommand = vscode.commands.registerCommand('codevision.reprocess', () => {
+        documentWatcher.reprocess();
+    });
+    context.subscriptions.push(startCommand, reprocessCommand, documentWatcher);
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map

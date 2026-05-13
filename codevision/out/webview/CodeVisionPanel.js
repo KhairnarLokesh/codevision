@@ -105,6 +105,9 @@ class CodeVisionPanel {
                 case 'hello':
                     vscode.window.showInformationMessage(text);
                     return;
+                case 'ready':
+                    vscode.commands.executeCommand('codevision.reprocess');
+                    return;
             }
         }, undefined, this._disposables);
     }
