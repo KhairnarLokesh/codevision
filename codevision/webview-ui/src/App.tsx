@@ -1,5 +1,6 @@
 import { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import GraphViewer from './components/GraphViewer';
+import D3LinearViewer from './components/D3LinearViewer';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: Error | null}> {
   constructor(props: {children: ReactNode}) {
@@ -38,6 +39,8 @@ const getVscodeApi = () => {
 
 function App() {
   const [graphData, setGraphData] = useState<any>(null);
+  const [activeLine, setActiveLine] = useState<number | null>(null);
+  const [visitedHistory, setVisitedHistory] = useState<any[]>([]);
 
   useEffect(() => {
     const vscode = getVscodeApi();
@@ -50,6 +53,19 @@ function App() {
       if (message.type === 'updateGraph') {
         if (message.payload.graph !== undefined) {
           setGraphData(message.payload.graph);
+          setVisitedHistory([]);
+        }
+      } else if (message.type === 'debugUpdate') {
+        const { line, nodeData } = message.payload;
+        setActiveLine(line);
+        if (nodeData) {
+          setVisitedHistory(prev => {
+            const last = prev[prev.length - 1];
+            if (last?.line !== line) {
+              return [...prev, { line, data: nodeData }];
+            }
+            return prev;
+          });
         }
       }
     };
@@ -61,7 +77,15 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <ErrorBoundary>
-        {graphData ? <GraphViewer data={graphData} /> : <div style={{ padding: '20px', color: '#94a3b8' }}>Waiting for code changes...</div>}
+        {graphData ? (
+          graphData.metadata.diagramType === 'STACK' || graphData.metadata.diagramType === 'QUEUE' ? (
+            <D3LinearViewer data={graphData} activeLine={activeLine} history={visitedHistory} />
+          ) : (
+            <GraphViewer data={graphData} activeLine={activeLine} history={visitedHistory} />
+          )
+        ) : (
+          <div style={{ padding: '20px', color: '#94a3b8' }}>Waiting for code changes...</div>
+        )}
       </ErrorBoundary>
     </div>
   );

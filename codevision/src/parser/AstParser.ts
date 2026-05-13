@@ -55,6 +55,10 @@ export class AstParser {
     let hasLeftRight = false;
     let hasNext = false;
     let hasRecursiveClass = false;
+    let hasChildren = code.toLowerCase().includes('.children') || code.toLowerCase().includes('.child');
+    let hasAdj = code.toLowerCase().includes('adj') || code.toLowerCase().includes('addedge') || code.toLowerCase().includes('graph');
+    let hasStack = code.toLowerCase().includes('stack') || (code.includes('.push') && code.includes('.pop'));
+    let hasQueue = code.toLowerCase().includes('queue') || (code.includes('.push') && code.includes('.shift')) || code.toLowerCase().includes('enqueue');
     let hasExpress = code.includes('express()') || code.includes('app.get');
     let hasReact = code.includes('import React') || code.includes('useState(') || code.includes('Component');
     let classDeclarations = 0;
@@ -68,7 +72,13 @@ export class AstParser {
       if (line.includes('Model') || line.includes('@Entity') || line.includes('@Table')) dbEntities++;
     });
 
-    if (dbEntities > 0) {
+    if (hasStack) {
+      astData.metadata = { diagramType: 'STACK', confidence: 0.95, recommendedLayout: 'STACK' };
+      astData.patterns.push('lifo', 'stack_operations');
+    } else if (hasQueue) {
+      astData.metadata = { diagramType: 'QUEUE', confidence: 0.95, recommendedLayout: 'QUEUE' };
+      astData.patterns.push('fifo', 'queue_operations');
+    } else if (dbEntities > 0) {
       astData.metadata = { diagramType: 'DATABASE_SCHEMA', confidence: 0.90, recommendedLayout: 'ER_DIAGRAM' };
       astData.patterns.push('db_model', 'entity_relationships');
     } else if (hasLeftRight && hasRecursiveClass) {
@@ -77,6 +87,12 @@ export class AstParser {
     } else if (hasNext && hasRecursiveClass) {
       astData.metadata = { diagramType: 'LINKED_LIST', confidence: 0.92, recommendedLayout: 'LR' };
       astData.patterns.push('recursive_class', 'next_pointer');
+    } else if (hasAdj) {
+      astData.metadata = { diagramType: 'GRAPH', confidence: 0.88, recommendedLayout: 'TB' };
+      astData.patterns.push('adjacency_list', 'graph_edges');
+    } else if (hasChildren) {
+      astData.metadata = { diagramType: 'TREE', confidence: 0.85, recommendedLayout: 'TB' };
+      astData.patterns.push('children_array', 'hierarchy');
     } else if (hasExpress) {
       astData.metadata = { diagramType: 'BACKEND_API', confidence: 0.85, recommendedLayout: 'LAYERED' };
       astData.patterns.push('routing', 'api_endpoints');
@@ -111,30 +127,68 @@ export class AstParser {
       }
 
       const dsMatch = line.match(/([a-zA-Z0-9_]+)\.(next|prev|left|right|child|parent)\s*=\s*([a-zA-Z0-9_]+)/);
-      if (dsMatch) {
-        const sourceName = dsMatch[1];
-        const propName = dsMatch[2];
-        const targetName = dsMatch[3];
+      const pushMatch = line.match(/([a-zA-Z0-9_]+)\.(?:children|push)\.push\s*\(\s*([a-zA-Z0-9_]+)\s*\)/);
+      const stackPushMatch = line.match(/([a-zA-Z0-9_]+)\.push\s*\(\s*([a-zA-Z0-9_]+)\s*\)/);
+      const adjPushMatch = line.match(/([a-zA-Z0-9_]+)\[([a-zA-Z0-9_]+)\]\.push\s*\(\s*([a-zA-Z0-9_]+)\s*\)/);
+      const addEdgeMatch = line.match(/([a-zA-Z0-9_]+)\.addEdge\s*\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*\)/);
+      const popMatch = line.match(/([a-zA-Z0-9_]+)\.(?:pop|shift|dequeue)\s*\(\s*\)/);
+
+      if (dsMatch || pushMatch || adjPushMatch || addEdgeMatch || stackPushMatch || popMatch) {
+        let sourceName = '';
+        let targetName = '';
+        let propName = 'edge';
+        let operation = 'LINK';
+
+        if (dsMatch) {
+          sourceName = dsMatch[1];
+          propName = dsMatch[2];
+          targetName = dsMatch[3];
+        } else if (pushMatch && line.includes('.children')) {
+          sourceName = pushMatch[1];
+          propName = 'child';
+          targetName = pushMatch[2];
+        } else if (stackPushMatch) {
+          sourceName = stackPushMatch[1];
+          propName = 'push';
+          targetName = stackPushMatch[2];
+          operation = 'PUSH';
+        } else if (adjPushMatch) {
+          sourceName = adjPushMatch[2];
+          propName = 'to';
+          targetName = adjPushMatch[3];
+        } else if (addEdgeMatch) {
+          sourceName = addEdgeMatch[2];
+          propName = 'edge';
+          targetName = addEdgeMatch[3];
+        } else if (popMatch) {
+          sourceName = popMatch[1];
+          propName = 'pop';
+          operation = 'POP';
+        }
 
         let sourceNode = astData.entities.find(n => n.label === sourceName || n.label.startsWith(sourceName + ':'));
         if (!sourceNode) {
           sourceNode = { id: `inst_${sourceName}_${lineNumber}`, label: sourceName, type: 'Instance', startLine: lineNumber, endLine: lineNumber, semanticRole: 'pointer_source' };
           astData.entities.push(sourceNode);
         }
-        let targetNode = astData.entities.find(n => n.label === targetName || n.label.startsWith(targetName + ':'));
-        if (!targetNode) {
-          targetNode = { id: `inst_${targetName}_${lineNumber}`, label: targetName, type: 'Instance', startLine: lineNumber, endLine: lineNumber, semanticRole: 'pointer_target' };
-          astData.entities.push(targetNode);
-        }
+        
+        if (targetName) {
+            let targetNode = astData.entities.find(n => n.label === targetName || n.label.startsWith(targetName + ':'));
+            if (!targetNode) {
+              targetNode = { id: `inst_${targetName}_${lineNumber}`, label: targetName, type: 'Instance', startLine: lineNumber, endLine: lineNumber, semanticRole: 'pointer_target' };
+              astData.entities.push(targetNode);
+            }
 
-        astData.relationships.push({
-          id: `flow_${sourceNode.id}_${targetNode.id}_${lineNumber}`,
-          source: sourceNode.id,
-          target: targetNode.id,
-          label: propName,
-          type: `HAS_${propName.toUpperCase()}`,
-          animated: true
-        });
+            astData.relationships.push({
+              id: `flow_${sourceNode.id}_${targetNode.id}_${lineNumber}`,
+              source: sourceNode.id,
+              target: targetNode.id,
+              label: propName,
+              type: operation,
+              animated: true,
+              startLine: lineNumber
+            });
+        }
       }
     });
   }
