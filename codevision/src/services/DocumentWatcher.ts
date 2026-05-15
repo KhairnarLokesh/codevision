@@ -16,7 +16,7 @@ export class DocumentWatcher implements vscode.Disposable {
     this._graphBuilder = new GraphBuilder();
     this._analyzer = new StaticAnalyzer();
   }
-
+  
   public start() {
     if (!this._disposable) {
       this._disposable = vscode.workspace.onDidChangeTextDocument(this._onDocumentChanged, this);
@@ -40,7 +40,7 @@ export class DocumentWatcher implements vscode.Disposable {
 
     this._debounceTimer = setTimeout(() => {
       this._processDocument(document);
-    }, 500); // 500ms debounce
+    }, 1500); // 1500ms debounce for efficiency
   }
 
   private _processDocument(document: vscode.TextDocument) {

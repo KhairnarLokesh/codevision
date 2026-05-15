@@ -7,6 +7,7 @@ export interface ParsedEntity {
   startLine: number;
   endLine: number;
   semanticRole?: string;
+  metadata?: any;
 }
 
 export interface ParsedRelationship {
@@ -27,11 +28,30 @@ export interface AstData {
     diagramType: string;
     confidence: number;
     recommendedLayout: string;
+    maxVertices?: number;
   };
   patterns?: string[];
 }
 
+export interface ModelParser {
+  parse(code: string, fileName: string, languageId: string, currentData: AstData): AstData;
+}
+
+import { ModelService } from './ModelService';
+import { DataStructureParser } from './DataStructureParser';
+import { ArchitectureParser } from './ArchitectureParser';
+import { NeuralNetworkParser } from './NeuralNetworkParser';
+
 export class AstParser {
+  private modelService: ModelService;
+
+  constructor() {
+    this.modelService = new ModelService();
+    this.modelService.register(new DataStructureParser());
+    this.modelService.register(new ArchitectureParser());
+    this.modelService.register(new NeuralNetworkParser());
+  }
+
   public parse(code: string, fileName: string, languageId: string): AstData {
     let astData: AstData;
     if (languageId === 'typescript' || languageId === 'javascript' || languageId === 'typescriptreact') {
@@ -41,102 +61,199 @@ export class AstParser {
     }
     
     this.extractDataFlow(code, astData);
-    this.analyzeSemantics(code, astData);
     
+    // Delegate complex analysis to ModelService
+    astData = this.modelService.analyze(code, fileName, languageId, astData);
+    
+    // Final pass: ensure all entities have parent links where applicable
+    astData.entities.forEach(entity => {
+      if (entity.startLine > 0 && !astData.relationships.find(r => r.target === entity.id && r.type === 'CONTAINS')) {
+        this.linkToParent(entity.startLine, entity, astData);
+      }
+    });
+
     return astData;
   }
 
-  private analyzeSemantics(code: string, astData: AstData): void {
-    astData.metadata = { diagramType: 'GENERIC', confidence: 0.1, recommendedLayout: 'GRID' };
-    astData.patterns = [];
-
-    const lines = code.split('\n');
-
-    let hasLeftRight = false;
-    let hasNext = false;
-    let hasRecursiveClass = false;
-    let hasExpress = code.includes('express()') || code.includes('app.get');
-    let hasReact = code.includes('import React') || code.includes('useState(') || code.includes('Component');
-    let classDeclarations = 0;
-    let dbEntities = 0;
-
-    lines.forEach(line => {
-      if (line.match(/class\s+[A-Za-z0-9_]+/)) classDeclarations++;
-      if (line.match(/[A-Za-z0-9_]+\s+(left|right)\b/)) hasLeftRight = true;
-      if (line.match(/[A-Za-z0-9_]+\s+(next)\b/)) hasNext = true;
-      if (line.match(/([A-Z][A-Za-z0-9_]*)\s+[a-z_][a-zA-Z0-9_]*\s*;/)) hasRecursiveClass = true; 
-      if (line.includes('Model') || line.includes('@Entity') || line.includes('@Table')) dbEntities++;
-    });
-
-    if (dbEntities > 0) {
-      astData.metadata = { diagramType: 'DATABASE_SCHEMA', confidence: 0.90, recommendedLayout: 'ER_DIAGRAM' };
-      astData.patterns.push('db_model', 'entity_relationships');
-    } else if (hasLeftRight && hasRecursiveClass) {
-      astData.metadata = { diagramType: 'BINARY_TREE', confidence: 0.95, recommendedLayout: 'TB' };
-      astData.patterns.push('recursive_class', 'left_right_pointers');
-    } else if (hasNext && hasRecursiveClass) {
-      astData.metadata = { diagramType: 'LINKED_LIST', confidence: 0.92, recommendedLayout: 'LR' };
-      astData.patterns.push('recursive_class', 'next_pointer');
-    } else if (hasExpress) {
-      astData.metadata = { diagramType: 'BACKEND_API', confidence: 0.85, recommendedLayout: 'LAYERED' };
-      astData.patterns.push('routing', 'api_endpoints');
-    } else if (hasReact) {
-      astData.metadata = { diagramType: 'FRONTEND_COMPONENT_TREE', confidence: 0.85, recommendedLayout: 'TB' };
-      astData.patterns.push('react_components', 'jsx');
-    } else if (classDeclarations > 1) {
-      astData.metadata = { diagramType: 'OOP_ARCHITECTURE', confidence: 0.7, recommendedLayout: 'TB' };
-      astData.patterns.push('multiple_classes');
-    }
-  }
 
   private extractDataFlow(code: string, astData: AstData) {
     const lines = code.split('\n');
 
     lines.forEach((line, index) => {
       const lineNumber = index + 1;
-      
-      const instMatch = line.match(/(?:[a-zA-Z0-9_<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*=\s*(?:new\s+)?([A-Z][a-zA-Z0-9_]+)\s*\(/);
-      if (instMatch) {
-        const varName = instMatch[1];
-        const className = instMatch[2];
 
-        let instNode = astData.entities.find(n => n.label === varName);
-        if (!instNode) {
-          instNode = { id: `inst_${varName}_${lineNumber}`, label: `${varName}: ${className}`, type: 'Instance', startLine: lineNumber, endLine: lineNumber, semanticRole: 'instantiation' };
-          astData.entities.push(instNode);
-        } else {
-          instNode.label = `${varName}: ${className}`;
-          instNode.type = 'Instance';
+      // 1. Array Literal Match: int[] numbers = {10, 20};
+      const arrayLiteralMatch = line.match(/(?:[a-zA-Z0-9_<>]+)\[\]\s+([a-zA-Z0-9_]+)\s*=\s*\{([^}]+)\}/);
+      if (arrayLiteralMatch) {
+        const arrayName = arrayLiteralMatch[1];
+        const elementsStr = arrayLiteralMatch[2];
+        const elements = elementsStr.split(',').map(e => e.trim().replace(/"/g, ''));
+
+        let arrayNode = astData.entities.find(n => n.id === `arr_${arrayName}`);
+        if (!arrayNode) {
+          arrayNode = { 
+            id: `arr_${arrayName}`, 
+            label: `${arrayName}[${elements.length}]`, 
+            type: 'Array Memory', 
+            startLine: lineNumber, 
+            endLine: lineNumber, 
+            semanticRole: 'collection',
+            metadata: { elements }
+          };
+          astData.entities.push(arrayNode);
+          this.linkToParent(lineNumber, arrayNode, astData);
         }
+        return;
       }
 
-      const dsMatch = line.match(/([a-zA-Z0-9_]+)\.(next|prev|left|right|child|parent)\s*=\s*([a-zA-Z0-9_]+)/);
-      if (dsMatch) {
-        const sourceName = dsMatch[1];
-        const propName = dsMatch[2];
-        const targetName = dsMatch[3];
+      // 2. Array instantiation with new: int[] newArray = new int[size];
+      const arrayNewMatch = line.match(/(?:[a-zA-Z0-9_<>]+)\[\]\s+([a-zA-Z0-9_]+)\s*=\s*new\s+[a-zA-Z0-9_]+\s*\[([^\]]+)\]/);
+      if (arrayNewMatch) {
+        const arrayName = arrayNewMatch[1];
+        const sizeExpr = arrayNewMatch[2];
 
-        let sourceNode = astData.entities.find(n => n.label === sourceName || n.label.startsWith(sourceName + ':'));
-        if (!sourceNode) {
-          sourceNode = { id: `inst_${sourceName}_${lineNumber}`, label: sourceName, type: 'Instance', startLine: lineNumber, endLine: lineNumber, semanticRole: 'pointer_source' };
-          astData.entities.push(sourceNode);
+        let arrayNode = astData.entities.find(n => n.id === `arr_${arrayName}`);
+        if (!arrayNode) {
+          arrayNode = { 
+            id: `arr_${arrayName}`, 
+            label: `${arrayName}[]`, 
+            type: 'Array Memory', 
+            startLine: lineNumber, 
+            endLine: lineNumber, 
+            semanticRole: 'collection',
+            metadata: { elements: [], sizeExpr }
+          };
+          astData.entities.push(arrayNode);
+          this.linkToParent(lineNumber, arrayNode, astData);
         }
-        let targetNode = astData.entities.find(n => n.label === targetName || n.label.startsWith(targetName + ':'));
-        if (!targetNode) {
-          targetNode = { id: `inst_${targetName}_${lineNumber}`, label: targetName, type: 'Instance', startLine: lineNumber, endLine: lineNumber, semanticRole: 'pointer_target' };
-          astData.entities.push(targetNode);
-        }
+        return;
+      }
 
-        astData.relationships.push({
-          id: `flow_${sourceNode.id}_${targetNode.id}_${lineNumber}`,
-          source: sourceNode.id,
-          target: targetNode.id,
-          label: propName,
-          type: `HAS_${propName.toUpperCase()}`,
-          animated: true
-        });
+      // 3. Generic Instantiation: Stack s = new Stack();
+      const genericInstMatch = line.match(/(?:[a-zA-Z0-9_<>\[\]]+\s+)?([a-zA-Z0-9_]+)\s*=\s*new\s+([A-Z][a-zA-Z0-9_]+)\s*\(([^)]*)\)/);
+      if (genericInstMatch && !line.includes('.')) {
+        const varName = genericInstMatch[1];
+        const className = genericInstMatch[2];
+        const args = genericInstMatch[3];
+        const label = args ? args.replace(/"/g, '') : varName;
+
+        let type = 'Object';
+        if (className.includes('Stack')) type = 'Stack Memory';
+        else if (className.includes('Queue') || className.includes('LinkedList')) type = 'Queue Memory';
+        else if (className.includes('Graph')) type = 'Graph Node';
+        else if (className.includes('Node') || className.includes('Tree')) type = 'Tree Node';
+
+        let instNode = astData.entities.find(n => n.id === `inst_${varName}`);
+        if (!instNode) {
+          instNode = { 
+            id: `inst_${varName}`, 
+            label: label, 
+            type: type, 
+            startLine: lineNumber, 
+            endLine: lineNumber, 
+            semanticRole: 'collection',
+            metadata: { elements: [], operations: [] }
+          };
+          astData.entities.push(instNode);
+          this.linkToParent(lineNumber, instNode, astData);
+        }
+        return;
+      }
+
+      // 4. Pointer Assignments: root.left = node
+      const pointerMatch = line.match(/([a-zA-Z0-9_\.]+)\.(next|prev|left|right|child|parent)\s*=\s*([a-zA-Z0-9_]+)\s*;/);
+      if (pointerMatch) {
+         const sourcePath = pointerMatch[1];
+         const propName = pointerMatch[2];
+         const targetName = pointerMatch[3];
+
+         const sourceId = `inst_${sourcePath.replace(/\./g, '_')}`;
+         const targetId = `inst_${targetName}`;
+
+         if (!astData.entities.find(n => n.id === sourceId)) {
+            astData.entities.push({ id: sourceId, label: sourcePath, type: 'Tree Node', startLine: lineNumber, endLine: lineNumber, semanticRole: 'pointer', metadata: { elements: [] } });
+         }
+         if (!astData.entities.find(n => n.id === targetId)) {
+            astData.entities.push({ id: targetId, label: targetName, type: 'Tree Node', startLine: lineNumber, endLine: lineNumber, semanticRole: 'pointer', metadata: { elements: [] } });
+         }
+
+         astData.relationships.push({
+           id: `rel_${sourceId}_${targetId}_${lineNumber}`,
+           source: sourceId,
+           target: targetId,
+           label: propName,
+           type: `HAS_${propName.toUpperCase()}`,
+           animated: true
+         });
+         return;
+      }
+
+      // 5. Operations: s.push(10), q.add(20), arr[i] = 30
+      // Array assignment
+      const arrayAssignMatch = line.match(/([a-zA-Z0-9_]+)\[([^\]]+)\]\s*=\s*([^;]+);/);
+      if (arrayAssignMatch) {
+        const arrayName = arrayAssignMatch[1];
+        const value = arrayAssignMatch[3].trim().replace(/"/g, '');
+        let arrayNode = astData.entities.find(n => n.id === `arr_${arrayName}`);
+        if (arrayNode) {
+          if (!arrayNode.metadata.elements.includes(value)) {
+            arrayNode.metadata.elements.push(value);
+            arrayNode.label = `${arrayName}[${arrayNode.metadata.elements.length}]`;
+          }
+        }
+        return;
+      }
+
+      // Method calls
+      const methodMatch = line.match(/([a-zA-Z0-9_]+)\.(push|pop|add|offer|enqueue|dequeue|poll|peek|top|front|addEdge|add_edge)\s*\(([^)]*)\)/);
+      if (methodMatch) {
+        const objName = methodMatch[1];
+        const op = methodMatch[2];
+        const args = methodMatch[3].replace(/"/g, '').split(',').map(a => a.trim());
+
+        let node = astData.entities.find(n => n.id === `inst_${objName}`);
+        if (node) {
+          if (!node.metadata.elements) node.metadata.elements = [];
+          
+          if (['push', 'add', 'offer', 'enqueue'].includes(op)) {
+            node.metadata.elements.push(args[0]);
+          } else if (['pop', 'poll', 'dequeue'].includes(op)) {
+            op === 'pop' ? node.metadata.elements.pop() : node.metadata.elements.shift();
+          } else if (op === 'addEdge' || op === 'add_edge') {
+            // Handle graph edges
+            const sourceVal = args[0];
+            const targetVal = args[1];
+            const sourceId = `graph_${objName}_node_${sourceVal}`;
+            const targetId = `graph_${objName}_node_${targetVal}`;
+            
+            if (!astData.entities.find(n => n.id === sourceId)) {
+              astData.entities.push({ id: sourceId, label: sourceVal, type: 'Graph Node', startLine: lineNumber, endLine: lineNumber, semanticRole: 'vertex', metadata: { elements: [] } });
+            }
+            if (!astData.entities.find(n => n.id === targetId)) {
+              astData.entities.push({ id: targetId, label: targetVal, type: 'Graph Node', startLine: lineNumber, endLine: lineNumber, semanticRole: 'vertex', metadata: { elements: [] } });
+            }
+            astData.relationships.push({ id: `edge_${sourceId}_${targetId}_${lineNumber}`, source: sourceId, target: targetId, label: '', type: 'HAS_EDGE' });
+          }
+        }
+        return;
       }
     });
+  }
+
+  private linkToParent(lineNumber: number, node: ParsedEntity, astData: AstData) {
+    let parentNode = astData.entities.find(e => e.type === 'Function' && lineNumber >= e.startLine && lineNumber <= e.endLine);
+    if (!parentNode) {
+      parentNode = astData.entities.find(e => e.type === 'Class' && lineNumber >= e.startLine && lineNumber <= e.endLine);
+    }
+    if (parentNode) {
+      astData.relationships.push({
+        id: `edge_${parentNode.id}_${node.id}`,
+        source: parentNode.id,
+        target: node.id,
+        label: 'declares',
+        type: 'CONTAINS'
+      });
+    }
   }
 
   private parseUniversal(code: string, languageId: string): AstData {
@@ -150,7 +267,7 @@ export class AstParser {
     lines.forEach((line, index) => {
       const lineNumber = index + 1;
       
-      const classMatch = line.match(/(?:class|struct|interface)\s+([a-zA-Z0-9_]+)/);
+      const classMatch = line.match(/(?:class|struct|interface|namespace)\s+([a-zA-Z0-9_]+)/);
       if (classMatch) {
         currentClassId = `class_${nodeIdCounter++}`;
         entities.push({
@@ -163,8 +280,9 @@ export class AstParser {
         });
       }
 
-      const funcMatch = line.match(/(?:def|fn|func|public|private|protected)\s+(?:[a-zA-Z0-9_<>]+\s+)?([a-zA-Z0-9_]+)\s*\(/);
-      if (funcMatch && !line.includes('class ') && !line.includes('new ')) {
+      // C++ Style: void Graph::addEdge or function name
+      const funcMatch = line.match(/(?:def|fn|func|public|private|protected|void|int|auto|virtual)\s+(?:(?:static|final|async|override)\s+)*(?:[a-zA-Z0-9_<>[\]:]+\s+)?([a-zA-Z0-9_]+)\s*\(/);
+      if (funcMatch && !line.includes('class ') && !line.includes('new ') && !line.includes('delete ')) {
         const funcId = `func_${nodeIdCounter++}`;
         entities.push({
           id: funcId,

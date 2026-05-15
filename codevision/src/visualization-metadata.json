@@ -1,0 +1,22 @@
+{
+  "themes": {
+    "Class": { "color": "#3b82f6", "icon": "Box" },
+    "Function": { "color": "#a855f7", "icon": "Activity" },
+    "Method": { "color": "#a855f7", "icon": "Activity" },
+    "Tree Node": { "color": "#22c55e", "icon": "Layers" },
+    "List Node": { "color": "#22c55e", "icon": "Link" },
+    "Graph Node": { "color": "#f97316", "icon": "Circle" },
+    "Stack Memory": { "color": "#ef4444", "icon": "Database" },
+    "Queue Memory": { "color": "#eab308", "icon": "Database" },
+    "Array Memory": { "color": "#f59e0b", "icon": "Grid" },
+    "Neural Layer": { "color": "#6366f1", "icon": "Activity" },
+    "API": { "color": "#f97316", "icon": "Server" },
+    "Database": { "color": "#ef4444", "icon": "Database" }
+  },
+  "attributeMappings": {
+    "semanticRole": "Semantic Role",
+    "startLine": "Start Line",
+    "endLine": "End Line",
+    "error": "Status"
+  }
+}

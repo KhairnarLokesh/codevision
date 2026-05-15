@@ -10,7 +10,8 @@ export class GraphBuilder {
           label: entity.label,
           type: entity.type,
           startLine: entity.startLine,
-          semanticRole: entity.semanticRole
+          semanticRole: entity.semanticRole,
+          metadata: entity.metadata
         },
         type: 'customNode'
       };

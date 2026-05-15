@@ -38,13 +38,16 @@ const extensionConfig = {
     ],
   },
   externals: {
-    vscode: 'commonjs vscode', // ignored because it doesn't exist in or out of node_modules
+    vscode: 'commonjs vscode',
     eslint: 'commonjs eslint'
+  },
+  optimization: {
+    minimize: false
   },
   performance: {
     hints: false,
   },
-  devtool: 'nosources-source-map', // create a source map that points to the original source file
+  devtool: 'nosources-source-map',
 };
 
 module.exports = [extensionConfig];

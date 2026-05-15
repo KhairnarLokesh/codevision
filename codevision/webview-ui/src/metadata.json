@@ -1,0 +1,32 @@
+{
+  "themes": {
+    "Class": { "color": "#3b82f6", "icon": "Box" },
+    "Function": { "color": "#a855f7", "icon": "Activity" },
+    "Method": { "color": "#a855f7", "icon": "Activity" },
+    "Tree Node": { "color": "#22c55e", "icon": "Layers" },
+    "List Node": { "color": "#22c55e", "icon": "Link" },
+    "Graph Node": { "color": "#f97316", "icon": "Circle" },
+    "Stack Memory": { "color": "#ef4444", "icon": "Database" },
+    "Queue Memory": { "color": "#eab308", "icon": "Database" },
+    "Array Memory": { "color": "#f59e0b", "icon": "Grid" },
+    "Neural Layer": { "color": "#335588", "icon": "Activity" },
+    "Conv": { "color": "#335588", "icon": "Layers" },
+    "Linear": { "color": "#335588", "icon": "Layers" },
+    "Dense": { "color": "#335588", "icon": "Layers" },
+    "ReLU": { "color": "#702921", "icon": "Activity" },
+    "Softmax": { "color": "#702921", "icon": "Activity" },
+    "MaxPool": { "color": "#335533", "icon": "Grid" },
+    "AvgPool": { "color": "#335533", "icon": "Grid" },
+    "BatchNormalization": { "color": "#335544", "icon": "Server" },
+    "Concat": { "color": "#6c4f47", "icon": "Link" },
+    "Reshape": { "color": "#6c4f47", "icon": "Grid" },
+    "API": { "color": "#f97316", "icon": "Server" },
+    "Database": { "color": "#ef4444", "icon": "Database" }
+  },
+  "attributeMappings": {
+    "semanticRole": "Semantic Role",
+    "startLine": "Start Line",
+    "endLine": "End Line",
+    "error": "Status"
+  }
+}

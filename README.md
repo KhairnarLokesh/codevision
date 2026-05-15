@@ -7,8 +7,7 @@
   [![React](https://img.shields.io/badge/Powered%20by-React%20Flow-61dafb.svg)](https://reactflow.dev/)
 </div>
 
-<br />
-
+<br>
 CodeVision is an advanced, real-time code visualization system that lives directly inside your editor. It goes far beyond traditional "dumb" graph renderers. By utilizing a custom **Semantic Pattern Detection Engine**, CodeVision actively reads your source code, understands its architecture, and dynamically renders the most accurate, interactive visualization on the fly.
 
 Whether you are building complex Data Structures, full-stack React component trees, layered backend Express APIs, or standard OOP architectures, CodeVision understands your intent and maps it instantly.
